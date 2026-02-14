@@ -15,7 +15,7 @@ def send_line(message):
     return res
 
 def main():
-    print("--- 高精度フィルター版で開始 ---")
+    print("--- 最終・価格連動フィルタ版で開始 ---")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     
     res = requests.get(TARGET_URL, headers=headers)
@@ -24,44 +24,33 @@ def main():
 
     current_items = []
     
-    # 手法：すべての「商品名が含まれそうなタグ」をスキャン
-    # 二木さんのサイトでは dt や a タグに商品名が入ります
-    potential_items = soup.find_all(['dt', 'a'])
-
-    # 除外したい「お知らせ」系のキーワード
-    exclude_keywords = ["お知らせ", "について", "変更", "発行", "ポイント", "ガイド", "表記", "ポリシー", "お問い合わせ", "ログイン", "マイページ", "カート"]
-
-    for item in potential_items:
-        name = item.get_text(strip=True)
-        
-        # フィルター条件：
-        # 1. 文字が空でない
-        # 2. 10文字以上（商品名は長いため）
-        # 3. 除外キーワードが含まれていない
-        # 4. 「予約」や「BOX」、「カード」などのトレカ特有の言葉が含まれている（精度アップ）
-        if name and len(name) >= 10:
-            if not any(k in name for k in exclude_keywords):
-                # トレカらしいキーワードが含まれているか、または特定のクラスを持っている場合
-                if any(k in name for k in ["予約", "BOX", "カード", "202", "BBM", "MLB", "NBA"]):
-                    current_items.append(name)
+    # 手法：商品価格（￥）が含まれるエリアを特定し、その上の商品名を取得する
+    # 二木さんのサイト構造： <dt class="item_name">商品名</dt> <dd class="item_price">￥6,200</dd>
+    
+    # すべての価格表示を探す
+    price_tags = soup.find_all(class_='item_price')
+    
+    for price in price_tags:
+        # 価格タグの直前にある「商品名タグ(dt)」を探す
+        name_tag = price.find_previous('dt', class_='item_name')
+        if name_tag:
+            name = name_tag.get_text(strip=True)
+            # 「○○年プロ野球カード」というメニュー名を除外するための条件
+            if name and "カード" in name and len(name) > 15:
+                current_items.append(name)
 
     # 重複を削除
     current_items = list(dict.fromkeys(current_items))
     
-    print(f"抽出された商品数: {len(current_items)}")
+    print(f"抽出された本物の商品数: {len(current_items)}")
 
     if not current_items:
-        print("商品が見つかりませんでした。別のタグを探します。")
-        # 最終手段：特定のクラス名(item_name)をもう一度フラットに探す
-        items = soup.find_all(class_='item_name')
-        current_items = [i.get_text(strip=True) for i in items if i.get_text(strip=True)]
-
-    if not current_items:
+        print("商品が見つかりませんでした。")
         return
 
-    # 最新の5件を表示
+    # 送信内容を作成
     print(f"送信内容例: {current_items[0]}")
-    msg = "【二木トレカ新着】\n" + "\n".join(current_items[:5])
+    msg = "【本物の新着入荷！】\n" + "\n".join(current_items[:10]) # 多めに10件
     response = send_line(msg)
     print(f"LINE送信結果: {response.status_code}")
 
