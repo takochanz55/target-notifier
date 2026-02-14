@@ -14,23 +14,30 @@ def send_line(message):
     requests.post(url, headers=headers, json=payload)
 
 def main():
-    # サイト読み込み
+    print("サイトにアクセス中...") # 進行状況を表示
     res = requests.get(TARGET_URL)
     res.encoding = 'utf-8'
     soup = BeautifulSoup(res.text, 'html.parser')
 
-    # 商品名を取得
     current_items = []
-    for dt in soup.find_all('dt', class_='item_name'):
+    items = soup.find_all('dt', class_='item_name')
+    print(f"見つかった商品数: {len(items)}") # 何件見つかったか表示
+
+    for dt in items:
         name = dt.get_text(strip=True)
         if name: current_items.append(name)
 
-    if not current_items: return
+    if not current_items:
+        print("商品名が見つかりませんでした。サイトの構造が変わった可能性があります。")
+        return
 
-    # 【重要】今回はGitHubに保存せず、新着の判定だけ行います
-    # ※初回実行時は全商品が届きます
-    msg = "【ターゲット新着】\n" + "\n".join(current_items[:5]) # 最初は5件だけテスト
-    send_line(msg)
+    print(f"送信する商品例: {current_items[0]}") # 1件目を表示
+    msg = "【テスト通知】\n" + "\n".join(current_items[:5])
+    
+    # LINE送信の結果を表示
+    response = send_line(msg)
+    print(f"LINE送信結果ステータス: {response.status_code}")
+    print(f"LINE送信レスポンス: {response.text}")
 
 if __name__ == "__main__":
     main()
