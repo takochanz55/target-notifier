@@ -15,8 +15,7 @@ def send_line(message):
     return res
 
 def main():
-    print("--- 抽出ロジック強化版で開始 ---")
-    # サイトがプログラムからのアクセスを拒否しないよう「ブラウザのふり」をする設定を追加
+    print("--- 商品エリア狙い撃ち版で開始 ---")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     
     res = requests.get(TARGET_URL, headers=headers)
@@ -25,30 +24,41 @@ def main():
 
     current_items = []
     
-    # 手法1: class名 "item_name" を持つ全ての要素を探す
-    items = soup.find_all(class_='item_name')
+    # 1. 「新商品」という見出しがあるブロック(id="index_new_item")の中だけを探す
+    new_item_section = soup.find('div', id='index_new_item')
     
-    # 手法2: もし手法1で見つからなければ、リンクテキストから探す（二木さんのサイト特有の構造対策）
-    if not items:
-        items = soup.select('dl dt a') # dlタグの中のdtの中のaタグを探す
+    if new_item_section:
+        # その中の商品名(class="item_name")を取得
+        items = new_item_section.find_all(class_='item_name')
+        for item in items:
+            name = item.get_text(strip=True)
+            if name:
+                current_items.append(name)
+    
+    # 2. もし上記で見つからない場合の予備（「おすすめ商品」エリアも念のため）
+    if not current_items:
+        recommend_section = soup.find('div', id='index_recommend_item')
+        if recommend_section:
+            items = recommend_section.find_all(class_='item_name')
+            for item in items:
+                name = item.get_text(strip=True)
+                current_items.append(name)
 
-    for item in items:
-        name = item.get_text(strip=True)
-        if name and len(name) > 5: # 短すぎるゴミデータを除外
-            current_items.append(name)
+    # 「お知らせ」によく含まれるキーワードを除外（念のためのフィルター）
+    exclude_keywords = ["お知らせ", "について", "変更", "発行"]
+    current_items = [i for i in current_items if not any(k in i for k in exclude_keywords)]
 
-    print(f"見つかった商品数: {len(current_items)}")
+    print(f"見つかった本物の商品数: {len(current_items)}")
 
     if not current_items:
-        print("まだ商品が見つかりません。HTMLソースを出力して確認します。")
-        # print(res.text[:500]) # 予備のデバッグ用
+        print("商品が見つかりませんでした。")
         return
 
-    # 重複を除去して整える
+    # 重複除去
     current_items = list(dict.fromkeys(current_items))
-    print(f"送信内容 (先頭): {current_items[0]}")
     
-    msg = "【ターゲット新着】\n" + "\n".join(current_items[:5])
+    # 通知（まずは最新5件）
+    msg = "【二木トレカ新着】\n" + "\n".join(current_items[:5])
     response = send_line(msg)
     print(f"LINE送信結果: {response.status_code}")
 
